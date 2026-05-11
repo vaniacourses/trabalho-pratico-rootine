@@ -2,8 +2,9 @@ import { useEcoStore } from "@/store/useEcoStore";
 import dayjs from "dayjs";
 import "dayjs/locale/pt-br";
 import relativeTime from "dayjs/plugin/relativeTime";
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import MissionEditModal from "./MissionEditModal";
 
 dayjs.extend(relativeTime);
 dayjs.locale("pt-br");
@@ -28,6 +29,7 @@ export default function MissionCard({
   expiresAt,
 }: MissionCardProps) {
   const { completeMission, refuseMission } = useEcoStore();
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
   const timeLeft = dayjs(expiresAt).fromNow();
   const isExpired = dayjs().isAfter(dayjs(expiresAt));
@@ -35,41 +37,55 @@ export default function MissionCard({
   if (isExpired) return null;
 
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <View style={styles.badgeRow}>
-          <Text style={styles.categoryTag}>
-            {category?.toUpperCase() || "GERAL"}
-          </Text>
-          <Text style={styles.deadlineTag}>⌛ {timeLeft}</Text>
+    <>
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <View style={styles.badgeRow}>
+            <Text style={styles.categoryTag}>
+              {category?.toUpperCase() || "GERAL"}
+            </Text>
+            <Text style={styles.deadlineTag}>⌛ {timeLeft}</Text>
+          </View>
+          
+          <View style={styles.rightHeader}>
+            <TouchableOpacity onPress={() => setEditModalVisible(true)} style={styles.editButton}>
+              <Text style={styles.editText}>✏️ Editar</Text>
+            </TouchableOpacity>
+            <Text style={styles.xpText}>+{xp} XP</Text>
+          </View>
         </View>
-        <Text style={styles.xpText}>+{xp} XP</Text>
+
+        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.description}>{description}</Text>
+
+        <View style={styles.aiBox}>
+          <Text style={styles.aiLabel}>POR QUE ESTA MISSÃO?</Text>
+          <Text style={styles.aiContent}>{justification}</Text>
+        </View>
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.button, styles.refuseButton]}
+            onPress={() => refuseMission(missionId)}
+          >
+            <Text style={styles.refuseText}>Recusar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.completeButton]}
+            onPress={() => completeMission(missionId)}
+          >
+            <Text style={styles.buttonText}>Concluir</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
-
-      <View style={styles.aiBox}>
-        <Text style={styles.aiLabel}>POR QUE ESTA MISSÃO?</Text>
-        <Text style={styles.aiContent}>{justification}</Text>
-      </View>
-
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.button, styles.refuseButton]}
-          onPress={() => refuseMission(missionId)}
-        >
-          <Text style={styles.refuseText}>Recusar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.completeButton]}
-          onPress={() => completeMission(missionId)}
-        >
-          <Text style={styles.buttonText}>Concluir</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      <MissionEditModal
+        missionId={missionId}
+        visible={editModalVisible}
+        onClose={() => setEditModalVisible(false)}
+      />
+    </>
   );
 }
 
@@ -90,6 +106,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
+  },
+  rightHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: "#F3E5F5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  editText: {
+    color: "#9C27B0",
+    fontSize: 10,
+    fontWeight: "bold",
   },
   badgeRow: { flexDirection: "row", gap: 8 },
   categoryTag: {

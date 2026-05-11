@@ -30,6 +30,7 @@ interface EcoState {
   completeMission: (missionId: string) => Promise<void>;
   refuseMission: (missionId: string) => Promise<void>;
   sendFeedback: (userId: string, missionId: string, feedbackText: string) => Promise<void>;
+  editMission: (userId: string, missionId: string, userInput: string) => Promise<void>;
 }
 
 // app/store/useEcoStore.ts
@@ -60,7 +61,7 @@ export const useEcoStore = create<EcoState>((set, get) => ({
 
   fetchPendingMissions: async (userId: string) => {
     set({ loading: true });
-    console.log("[ECO] Buscando todas as missões para o user:", userId);
+    console.log("[ECO] Buscando missões ativas para o user:", userId);
     const { data, error } = await supabase
       .from("user_missions")
       .select(`
@@ -71,15 +72,14 @@ export const useEcoStore = create<EcoState>((set, get) => ({
         ai_justification, 
         expires_at
       `)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("status", "active");
 
     if (error) {
       console.error("[ECO] Erro detectado na query:", error);
     }
 
     if (data) {
-      console.log("[ECO] Registros brutos encontrados no banco:", data.length);
-      console.log("[ECO] Exemplo de status do primeiro registro:", data[0]?.status);
       set({ missions: data as any });
     }
     set({ loading: false });
@@ -169,5 +169,23 @@ export const useEcoStore = create<EcoState>((set, get) => ({
         body: { userId, event_type: "FEEDBACK_SENT", missionId, feedbackText },
       })
       .catch((err) => console.error("[ECO] Brain sync (feedback) error:", err));
+  },
+
+  editMission: async (userId, missionId, userInput) => {
+    set({ loading: true });
+    try {
+      const { data, error } = await supabase.functions.invoke("edit-mission", {
+        body: { userId, missionId, userInput },
+      });
+
+      if (error) throw error;
+      
+      console.log("[ECO] Missão editada com sucesso:", data);
+      await get().fetchPendingMissions(userId);
+    } catch (err) {
+      console.error("[ECO] Erro ao editar missão:", err);
+    } finally {
+      set({ loading: false });
+    }
   },
 }));
