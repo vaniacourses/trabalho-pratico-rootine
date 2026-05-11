@@ -1,7 +1,8 @@
+import { useFocusEffect } from "expo-router";
 import MissionCard from "@/components/MissionCard";
 import { supabase } from "@/lib/supabase";
 import { useEcoStore } from "@/store/useEcoStore";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,25 +11,29 @@ import {
   View,
 } from "react-native";
 
-export default function TrailScreen() {
+export default function MissionsScreen() {
   const { missions, fetchPendingMissions, loading } = useEcoStore();
 
-  useEffect(() => {
-    async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) await fetchPendingMissions(user.id);
-    }
-    init();
-  }, []);
+  const loadMissions = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await fetchPendingMissions(user.id);
+  }, [fetchPendingMissions]);
+
+  // Re-fetch sempre que a aba ganhar foco
+  useFocusEffect(
+    useCallback(() => {
+      loadMissions();
+    }, [loadMissions])
+  );
 
   if (loading && missions.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4CAF50" />
         <Text style={styles.loadingText}>
-          O Guardião está analisando seus hábitos...
+          O Guardião está preparando suas missões personalizadas...
         </Text>
       </View>
     );
@@ -36,24 +41,25 @@ export default function TrailScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sua Trilha</Text>
+      <Text style={styles.title}>Missions</Text>
       <FlatList
         data={missions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <MissionCard
             missionId={item.id}
-            title={item.template.title}
-            description={item.template.description}
-            category={item.template.category}
-            justification={item.ai_justification}
-            xp={item.template.base_xp}
+            title={item.title}
+            description={item.description}
+            category={item.ai_justification?.category || "general"}
+            justification={item.ai_justification?.reason || ""}
+            expiresAt={item.expires_at}
+            xp={10} // XP base para missões dinâmicas
           />
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              Nenhuma missão pendente. Sua árvore agradece! 🌳
+              Nenhuma missão ativa. Complete seu lote diário para gerar novas! 🌳
             </Text>
           </View>
         }

@@ -4,13 +4,12 @@ import { create } from "zustand";
 // Tipagens baseadas no nosso esquema do Supabase
 interface Mission {
   id: string;
-  status: "pending" | "completed" | "refused" | "failed";
-  ai_justification: string;
-  template: {
-    title: string;
-    description: string;
+  status: "active" | "completed" | "refused" | "failed";
+  title: string;
+  description: string;
+  ai_justification: {
     category: string;
-    base_xp: number;
+    reason: string;
   };
 }
 
@@ -61,26 +60,26 @@ export const useEcoStore = create<EcoState>((set, get) => ({
 
   fetchPendingMissions: async (userId: string) => {
     set({ loading: true });
+    console.log("[ECO] Buscando todas as missões para o user:", userId);
     const { data, error } = await supabase
       .from("user_missions")
-      .select(
-        `
-      id, 
-      status, 
-      ai_justification, 
-      expires_at,
-      template:mission_templates (
-        title, 
-        description, 
-        category, 
-        base_xp
-      )
-    `,
-      )
-      .eq("user_id", userId)
-      .eq("status", "pending");
+      .select(`
+        id, 
+        status, 
+        title,
+        description,
+        ai_justification, 
+        expires_at
+      `)
+      .eq("user_id", userId);
 
-    if (!error && data) {
+    if (error) {
+      console.error("[ECO] Erro detectado na query:", error);
+    }
+
+    if (data) {
+      console.log("[ECO] Registros brutos encontrados no banco:", data.length);
+      console.log("[ECO] Exemplo de status do primeiro registro:", data[0]?.status);
       set({ missions: data as any });
     }
     set({ loading: false });
