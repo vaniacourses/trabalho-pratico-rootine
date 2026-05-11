@@ -30,40 +30,62 @@ export default function RootLayout() {
     if (!isReady) return;
 
     const inAuthGroup = segments[0] === "auth";
+    const inFlashcards = segments[0] === "flashcards";
+    const inDiagnostic = segments[0] === "diagnostic";
+    const inTabs = segments[0] === "(tabs)";
 
-    if (!session && !inAuthGroup) {
-      router.replace("/auth");
-    } else if (session) {
-      // SÓ faz a verificação se estiver na tela de auth (acabou de logar/cadastrar)
-      if (inAuthGroup) {
+    if (!session) {
+      if (!inAuthGroup) router.replace("/auth");
+    } else {
+      // Já está em rota protegida ou dentro das tabs — não redirecionar
+      if (inFlashcards || inDiagnostic || inTabs) return;
+
+      // Só verificar onboarding se vem de auth ou da raiz
+      if (inAuthGroup || segments.length === 0) {
         checkDiagnosticStatus(session.user.id);
       }
     }
-  }, [session, isReady]); // ❌ Removemos 'segments' daqui!
+  }, [session, isReady, segments]);
 
   // Função isolada e com tratamento de erro (Evita o 406)
   const checkDiagnosticStatus = async (userId: string) => {
     try {
+      // Usamos getUser() para garantir que a sessão é válida no servidor
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error("Sessão inválida:", authError);
+        await supabase.auth.signOut();
+        router.replace("/auth");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("profiles")
-        .select("socioeconomic_context")
+        .select("onboarding_completed")
         .eq("id", userId)
-        .maybeSingle(); // maybeSingle não quebra com erro 406 se retornar 0 linhas
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        // Se for erro de permissão (403/401), desloga
+        if (error.code === "42501" || error.message.includes("JWT")) {
+          await supabase.auth.signOut();
+          router.replace("/auth");
+          return;
+        }
+        throw error;
+      }
 
-      const needsDiagnostic =
-        !data?.socioeconomic_context ||
-        Object.keys(data.socioeconomic_context).length === 0;
+      const needsDiagnostic = !data?.onboarding_completed;
 
       if (needsDiagnostic) {
         router.replace("/diagnostic");
       } else {
-        router.replace("/");
+        router.replace("/(tabs)");
       }
     } catch (e) {
       console.error("Erro ao verificar diagnóstico:", e);
-      router.replace("/"); // Em caso de pane no banco, prioriza mandar pra Home
+      // Evita loop: se der erro, não tenta redirecionar se já estivermos em algum lugar seguro
     }
   };
 
@@ -80,6 +102,7 @@ export default function RootLayout() {
       <Stack.Screen name="auth" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="diagnostic/index" />
+      <Stack.Screen name="flashcards/index" />
     </Stack>
   );
 }

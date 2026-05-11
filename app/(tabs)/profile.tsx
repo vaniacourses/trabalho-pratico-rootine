@@ -44,7 +44,7 @@ export default function ProfileScreen() {
       </View>
 
       <Text style={styles.userName}>
-        {profileData?.full_name || "Protetor do Habitat"}
+        {profileData?.name || "Protetor do Habitat"}
       </Text>
       <Text style={styles.userXp}>{xp} XP Total acumulado</Text>
 

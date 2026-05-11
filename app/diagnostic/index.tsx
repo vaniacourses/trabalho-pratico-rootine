@@ -1,124 +1,77 @@
 import { DiagnosticCard } from "@/components/DiagnosticCard";
 import { ProgressBar } from "@/components/ProgressBar";
 import { supabase } from "@/lib/supabase";
-import { useEcoStore } from "@/store/useEcoStore";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-// PERGUNTAS ATUALIZADAS (Removi menção obrigatória à faculdade)
-const DIAGNOSTIC_QUESTIONS = [
-  // SOCIO (RESTRIÇÕES)
+// Perguntas de Onboarding — captura contexto socioeconômico (template profiles.socioeconomic_context)
+const ONBOARDING_QUESTIONS = [
   {
-    id: "restricao_fisica",
-    type: "socio",
-    label: "Possui limitacao fisica para caminhadas?",
-    options: ["sim", "nao"],
+    id: "housing",
+    label: "Sua moradia atual é:",
+    options: [
+      { label: "República", value: "shared_housing" },
+      { label: "Apartamento", value: "apartment" },
+      { label: "Casa", value: "house" },
+    ],
   },
   {
-    id: "infra_bairro",
-    type: "socio",
-    label: "Existe coleta seletiva no seu bairro?",
-    options: ["sim", "nao", "nao_sei"],
+    id: "mobility",
+    label: "Como você se locomove no dia a dia?",
+    options: [
+      { label: "Carro", value: "car" },
+      { label: "Transporte Público", value: "public_transport" },
+      { label: "Bicicleta", value: "bicycle" },
+      { label: "A pé", value: "walking" },
+    ],
   },
   {
-    id: "tipo_moradia",
-    type: "socio",
-    label: "Sua moradia atual e:",
-    options: ["republica", "apartamento", "casa"],
+    id: "diet",
+    label: "Possui alguma restrição alimentar?",
+    options: [
+      { label: "Nenhuma", value: "none" },
+      { label: "Vegetariano", value: "vegetarian" },
+      { label: "Vegano", value: "vegan" },
+    ],
   },
   {
-    id: "clima_extremo",
-    type: "socio",
-    label: "O calor onde voce mora e muito intenso?",
-    options: ["sim", "nao"],
-  },
-  // HABITOS
-  {
-    id: "banho_longo",
-    type: "habit",
-    label: "Banhos costumam passar de 10 minutos?",
-    options: ["faco", "nao"],
+    id: "financial_friction",
+    label: "Como está sua disponibilidade financeira?",
+    options: [
+      { label: "Apertada", value: "high" },
+      { label: "Moderada", value: "medium" },
+      { label: "Confortável", value: "low" },
+    ],
   },
   {
-    id: "carne_vermelha",
-    type: "habit",
-    label: "Consome carne quase todo dia?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "oleo_pia",
-    type: "habit",
-    label: "Descarta oleo de fritura na pia?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "sacola",
-    type: "habit",
-    label: "Usa sacolas descartaveis no mercado?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "garrafa",
-    type: "habit",
-    label: "Compra garrafas de agua na rua?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "eletronicos",
-    type: "habit",
-    label: "Deixa aparelhos em standby na tomada?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "luzes",
-    type: "habit",
-    label: "Esquece luzes acesas em locais vazios?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "maquina",
-    type: "habit",
-    label: "Lava pouca roupa por vez na maquina?",
-    options: ["faco", "nao"],
-  },
-  {
-    id: "copos",
-    type: "habit",
-    label: "Usa copos descartaveis fora de casa?",
-    options: ["faco", "nao"],
-  }, // AJUSTADO
-  {
-    id: "roupas",
-    type: "habit",
-    label: "Compra roupas novas sem necessidade?",
-    options: ["faco", "nao"],
+    id: "time_availability",
+    label: "Quanto tempo livre você tem no dia?",
+    options: [
+      { label: "Pouco", value: "low" },
+      { label: "Moderado", value: "medium" },
+      { label: "Bastante", value: "high" },
+    ],
   },
 ];
 
 export default function DiagnosticScreen() {
   const [currentStep, setCurrentStep] = useState(0);
-  const [data, setData] = useState({ socio: {}, habit: {} });
-  const [isSubmitting, setIsSubmitting] = useState(false); // Estado de Loading
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
-  const generateMissions = useEcoStore((state) => state.generateMissions);
 
-  const handleAnswer = async (answer: string) => {
-    // Evita cliques múltiplos durante o salvamento
+  const handleAnswer = async (value: string) => {
     if (isSubmitting) return;
 
-    const q = DIAGNOSTIC_QUESTIONS[currentStep];
-    const updatedData = {
-      ...data,
-      [q.type]: { ...data[q.type as keyof typeof data], [q.id]: answer },
-    };
+    const q = ONBOARDING_QUESTIONS[currentStep];
+    const updatedAnswers = { ...answers, [q.id]: value };
+    setAnswers(updatedAnswers);
 
-    setData(updatedData);
-
-    if (currentStep < DIAGNOSTIC_QUESTIONS.length - 1) {
+    if (currentStep < ONBOARDING_QUESTIONS.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      // ÚLTIMA PERGUNTA: Dispara o salvamento
+      // Última pergunta: montar JSON do template socioeconomic_context
       setIsSubmitting(true);
       try {
         const {
@@ -126,25 +79,30 @@ export default function DiagnosticScreen() {
         } = await supabase.auth.getUser();
 
         if (user) {
-          // 1. Atualiza o banco
+          const socioContext = {
+            constraints: {
+              housing: updatedAnswers.housing,
+              mobility: updatedAnswers.mobility,
+              diet: updatedAnswers.diet,
+            },
+            financial_friction: updatedAnswers.financial_friction,
+            time_availability: updatedAnswers.time_availability,
+          };
+
           const { error } = await supabase
             .from("profiles")
             .update({
-              socioeconomic_context: updatedData.socio,
-              current_habits: updatedData.habit,
+              socioeconomic_context: socioContext,
+              onboarding_completed: true,
             })
             .eq("id", user.id);
 
           if (error) throw error;
 
-          // 2. Chuta a árvore de missões
-          await generateMissions(user.id);
-
-          // 3. Força a ida pra aba Tabs diretamente e com força
-          router.push("/(tabs)");
+          router.replace("/(tabs)");
         }
       } catch (error) {
-        console.error("Erro final do diagnóstico:", error);
+        console.error("Erro ao salvar onboarding:", error);
       } finally {
         setIsSubmitting(false);
       }
@@ -155,22 +113,22 @@ export default function DiagnosticScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Sintetizando seu Habitat...</Text>
+        <Text style={styles.loadingText}>Preparando seu habitat...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ProgressBar progress={(currentStep + 1) / DIAGNOSTIC_QUESTIONS.length} />
+      <ProgressBar progress={(currentStep + 1) / ONBOARDING_QUESTIONS.length} />
 
       <View style={styles.content}>
         <DiagnosticCard
-          question={DIAGNOSTIC_QUESTIONS[currentStep] as any}
+          question={ONBOARDING_QUESTIONS[currentStep]}
           onAnswer={handleAnswer}
         />
         <Text style={styles.counter}>
-          {currentStep + 1} de {DIAGNOSTIC_QUESTIONS.length}
+          {currentStep + 1} de {ONBOARDING_QUESTIONS.length}
         </Text>
       </View>
     </View>

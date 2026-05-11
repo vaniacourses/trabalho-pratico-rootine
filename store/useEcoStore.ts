@@ -30,6 +30,7 @@ interface EcoState {
   generateMissions: (userId: string) => Promise<void>;
   completeMission: (missionId: string) => Promise<void>;
   refuseMission: (missionId: string) => Promise<void>;
+  sendFeedback: (userId: string, missionId: string, feedbackText: string) => Promise<void>;
 }
 
 // app/store/useEcoStore.ts
@@ -109,23 +110,30 @@ export const useEcoStore = create<EcoState>((set, get) => ({
   },
 
   refuseMission: async (missionId) => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase
       .from("user_missions")
       .update({ status: "refused" })
       .eq("id", missionId);
 
     if (!error) {
-      // Remove localmente para resposta instantânea
       set((state) => ({
         missions: state.missions.filter((m) => m.id !== missionId),
       }));
+
+      // Dispara sync-user-brain (não-bloqueante)
+      if (user) {
+        supabase.functions
+          .invoke("sync-user-brain", {
+            body: { userId: user.id, event_type: "MISSION_ACTION", missionId, missionAction: "REFUSED" },
+          })
+          .catch((err) => console.error("[ECO] Brain sync (refuse) error:", err));
+      }
     }
   },
 
   completeMission: async (missionId) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { error } = await supabase
@@ -134,11 +142,33 @@ export const useEcoStore = create<EcoState>((set, get) => ({
       .eq("id", missionId);
 
     if (!error) {
+      // Dispara sync-user-brain (não-bloqueante)
+      supabase.functions
+        .invoke("sync-user-brain", {
+          body: { userId: user.id, event_type: "MISSION_ACTION", missionId, missionAction: "COMPLETED" },
+        })
+        .catch((err) => console.error("[ECO] Brain sync (complete) error:", err));
+
       // Atualiza tudo em paralelo para dar sensação de velocidade
       await Promise.all([
         get().fetchProfile(user.id),
         get().fetchPendingMissions(user.id),
       ]);
     }
+  },
+
+  sendFeedback: async (userId, missionId, feedbackText) => {
+    // Salva o feedback no banco (opcional: campo feedback_notes em user_missions)
+    await supabase
+      .from("user_missions")
+      .update({ feedback_notes: feedbackText })
+      .eq("id", missionId);
+
+    // Dispara sync-user-brain (não-bloqueante)
+    supabase.functions
+      .invoke("sync-user-brain", {
+        body: { userId, event_type: "FEEDBACK_SENT", missionId, feedbackText },
+      })
+      .catch((err) => console.error("[ECO] Brain sync (feedback) error:", err));
   },
 }));

@@ -44,7 +44,7 @@ export default function AuthScreen() {
           email,
           password,
           options: {
-            data: { full_name: fullName },
+            data: { name: fullName },
             // Definimos como undefined para evitar conflitos de redirecionamento
             // enquanto testamos no ambiente local (localhost/IP).
             emailRedirectTo: undefined,

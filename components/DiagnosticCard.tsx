@@ -13,11 +13,10 @@ const { width } = Dimensions.get("window");
 interface DiagnosticCardProps {
   question: {
     id: string;
-    type: "socio" | "habit";
     label: string;
-    options: string[];
+    options: { label: string; value: string }[];
   };
-  onAnswer: (answer: string) => void;
+  onAnswer: (value: string) => void;
 }
 
 export const DiagnosticCard = ({ question, onAnswer }: DiagnosticCardProps) => {
@@ -27,20 +26,18 @@ export const DiagnosticCard = ({ question, onAnswer }: DiagnosticCardProps) => {
       exiting={FadeOutLeft}
       style={styles.card}
     >
-      <Text style={styles.typeLabel}>
-        {question.type === "socio" ? "ESTILO DE VIDA" : "HABITO ATUAL"}
-      </Text>
+      <Text style={styles.typeLabel}>PERFIL SOCIOECONÔMICO</Text>
       <Text style={styles.questionText}>{question.label}</Text>
 
       <View style={styles.optionsContainer}>
         {question.options.map((opt) => (
           <TouchableOpacity
-            key={opt}
+            key={opt.value}
             style={styles.optionButton}
-            onPress={() => onAnswer(opt)}
+            onPress={() => onAnswer(opt.value)}
           >
             <Text style={styles.optionText}>
-              {opt.replace(/_/g, " ").toUpperCase()}
+              {opt.label.toUpperCase()}
             </Text>
           </TouchableOpacity>
         ))}
