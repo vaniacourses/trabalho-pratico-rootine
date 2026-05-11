@@ -59,46 +59,58 @@ serve(async (req: Request) => {
     let eventContext = "";
 
     if (event_type === "BATCH_COMPLETED" && body.batchId) {
-      // Busca as respostas do lote para destilar em preferências
-      const { data: answers } = await supabaseAdmin
+      console.log(`[BRAIN] Processing batch: ${body.batchId}`);
+      
+      const { data: answers, error: ansErr } = await supabaseAdmin
         .from("user_flashcards_answers")
         .select("answer, flashcard_id")
         .eq("daily_batch", body.batchId);
 
-      const flashcardIds = (answers || []).map((a: any) => a.flashcard_id);
+      if (ansErr) throw new Error(`Error fetching answers: ${ansErr.message}`);
+      
+      console.log(`[BRAIN] Found ${answers?.length || 0} answers.`);
 
-      const { data: flashcards } = await supabaseAdmin
+      if (!answers || answers.length === 0) {
+        return new Response(JSON.stringify({ success: false, message: "No answers found for this batch." }), { headers: corsHeaders });
+      }
+
+      const flashcardIds = answers.map((a: any) => a.flashcard_id);
+
+      const { data: flashcards, error: flashErr } = await supabaseAdmin
         .from("flashcards")
-        .select("id, question, category")
+        .select("id, question")
         .in("id", flashcardIds);
 
+      if (flashErr) throw new Error(`Error fetching flashcards: ${flashErr.message}`);
+      
+      console.log(`[BRAIN] Found ${flashcards?.length || 0} flashcards.`);
+
       const questionsMap = Object.fromEntries(
-        (flashcards || []).map((f: any) => [f.id, { question: f.question, category: f.category }]),
+        (flashcards || []).map((f: any) => [f.id, f.question]),
       );
 
-      const enriched = (answers || []).map((a: any) => ({
-        question: questionsMap[a.flashcard_id]?.question ?? "?",
-        category: questionsMap[a.flashcard_id]?.category ?? "general",
-        answer: a.answer, // true=yes, false=no, null=skipped
+      const enriched = answers.map((a: any) => ({
+        question: questionsMap[a.flashcard_id] || "Unknown Question",
+        answer: a.answer,
       }));
 
       eventContext = `The user just answered a batch of daily flashcards. Here are the responses:
 ${JSON.stringify(enriched, null, 2)}
-Analyze these answers to infer preferences, blocks, and deficits.`;
+Analyze these answers to infer habits. If a question is 'Unknown Question', ignore it.`;
 
     } else if (event_type === "MISSION_ACTION" && body.missionId) {
-      // Busca a missão para contexto
+      // Busca a missão para contexto (missões agora são dinâmicas, sem template)
       const { data: mission } = await supabaseAdmin
         .from("user_missions")
-        .select("ai_justification, template:mission_templates(title, description, category)")
+        .select("title, description, ai_justification")
         .eq("id", body.missionId)
         .single();
 
       eventContext = `The user ${body.missionAction === "COMPLETED" ? "COMPLETED" : "REFUSED"} the following mission:
 ${JSON.stringify(mission, null, 2)}
 ${body.missionAction === "COMPLETED"
-  ? "Reinforce affinity and interest in this category."
-  : "Reduce affinity and register as a potential temporary hard block or lack of interest."}`;
+  ? "Reinforce affinity and interest in this mission's category."
+  : "Reduce affinity and register as a potential temporary hard block or lack of interest in this area."}`;
 
     } else if (event_type === "FEEDBACK_SENT" && body.feedbackText) {
       eventContext = `The user sent the following free-text feedback about their missions:
@@ -118,13 +130,18 @@ Extract constraints, preferences, or implicit sentiments to update the profile.`
 
 CURRENT PROFILE STATE:
 - Preferences (learned_preferences): ${JSON.stringify(currentPrefs)}
+- Affinities (affinities): ${JSON.stringify(currentAffinities)}
 - Socioeconomic Context: ${JSON.stringify(profile.socioeconomic_context || {})}
 
 SYNTHESIS GUIDELINES:
 1. interests: Habits the user ALREADY practices (TRUE responses).
 2. hard_blocks: Absolute constraints. DO NOT repeat socioeconomic context.
 3. deficits: Habits the user DOES NOT practice yet (FALSE responses).
-4. ai_justification: MANDATORY INTEGRITY CHECK. You must start this field by listing each question provided in the context and its corresponding answer. Then, provide a lengthy argumentative text explaining your reasoning based on the QUESTION TEXT and its answer.
+4. affinities: A mapping of specific categories to a float score (-1.0 to +1.0). 
+   - ALLOWED CATEGORIES: "waste", "energy", "water", "transport", "food", "consumption".
+   - Increase (+0.1 to +0.2) for TRUE responses in that category.
+   - Decrease (-0.1 to -0.2) for FALSE responses in that category.
+5. ai_justification: MANDATORY INTEGRITY CHECK. You must start this field by listing each question provided in the context and its corresponding answer. Then, provide a lengthy argumentative text explaining your reasoning based on the QUESTION TEXT and its answer.
 
 CORE LOGIC RULES:
 - Integrity First: If you do not list the questions and answers in ai_justification, the analysis is invalid.
@@ -140,6 +157,10 @@ EXPECTED RESPONSE EXAMPLE:
     "deficits": ["water conservation"],
     "evolution_tags": [...],
     "ai_justification": "INTEGRITY CHECK: 'Do you bike?' -> TRUE, 'Do you save water?' -> FALSE. REASONING: The user confirmed they bike, so I added 'cycling' to interests. They do not save water yet, so that is a deficit..."
+  },
+  "affinities": {
+    "transport": 0.5,
+    "water": -0.2
   }
 }
 
@@ -200,13 +221,31 @@ STRICTLY return a valid JSON. Merge deductions with the 'CURRENT PROFILE STATE'.
       ai_justification: aiLp.ai_justification || "No justification provided by AI.",
     };
 
+    // Affinity Math Validation
+    const mergedAffinities: Record<string, number> = {};
+    const aiAffinities = aiResult.affinities || {};
+    const allCategories = new Set([...Object.keys(currentAffinities), ...Object.keys(aiAffinities)]);
+    
+    for (const category of allCategories) {
+       // Only allow the explicitly allowed categories
+       if (!["waste", "energy", "water", "transport", "food", "consumption"].includes(category)) {
+           continue; // Skip invalid categories hallucinated by AI
+       }
+       
+       let val = aiAffinities[category] !== undefined ? Number(aiAffinities[category]) : currentAffinities[category];
+       
+       if (typeof val === 'number' && !isNaN(val)) {
+           // Strict clamp between -1.0 and 1.0
+           mergedAffinities[category] = Math.min(1.0, Math.max(-1.0, val));
+       }
+    }
+
     // ── 5. Save to database ───────────────────────────────────────────
     const { error: updateErr } = await supabaseAdmin
       .from("profiles")
       .update({
         learned_preferences: mergedPreferences,
-        // Keep current affinities as AI no longer manages them
-        affinities: currentAffinities,
+        affinities: mergedAffinities,
       })
       .eq("id", userId);
 
@@ -214,12 +253,37 @@ STRICTLY return a valid JSON. Merge deductions with the 'CURRENT PROFILE STATE'.
 
     console.log(`[BRAIN] Profile successfully updated for userId: ${userId}`);
 
+    // ── 6. Trigger Mission Generation ─────────────────────────────────
+    console.log(`[BRAIN] Disparando generate-missions via fetch nativo para userId: ${userId}...`);
+    try {
+      const authHeader = req.headers.get("Authorization");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      
+      if (!supabaseUrl) throw new Error("SUPABASE_URL não configurada.");
+
+      const functionUrl = `${supabaseUrl}/functions/v1/generate-missions`;
+      const genRes = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { "Authorization": authHeader } : {})
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      const genText = await genRes.text();
+      console.log(`[BRAIN] Resposta do generate-missions (Status HTTP: ${genRes.status}):`, genText);
+    } catch (err: any) {
+      console.error("[BRAIN] Falha crítica ao tentar disparar generate-missions via fetch:", err.message);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         event_type,
         ai_justification: mergedPreferences.ai_justification,
         updated_preferences: mergedPreferences,
+        updated_affinities: mergedAffinities,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
