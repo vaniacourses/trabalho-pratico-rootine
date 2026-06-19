@@ -6,6 +6,7 @@
 
 - Documento entrega 1: [link para docs editável](https://docs.google.com/document/d/10x120NHypRnIW5Y3ZrsmBKEnss1yjeJmQPm18CBFU0E/edit?usp=sharing)
 - Documento entrega 2: [link para docs editável](https://docs.google.com/document/d/1JkzBTUMDGWANjnApvreV2cIXuI78wKhP9aqwoCkCXgE/edit?usp=sharing)
+- Relatório de uso de IA: [link para docs editável](https://docs.google.com/document/d/1D7jBLJHYNkl7aQ-LtgzLg2atkeVeoFC39BoqfNVLJuk/edit?tab=t.0)
 
 ---
 
