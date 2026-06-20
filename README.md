@@ -5,8 +5,13 @@
 ## 📄 Entregas
 
 - Documento entrega 1: [link para docs editável](https://docs.google.com/document/d/10x120NHypRnIW5Y3ZrsmBKEnss1yjeJmQPm18CBFU0E/edit?usp=sharing)
+- Apresentação 1: [link do canva](https://canva.link/zdob9y4w2f1eedm)
 - Documento entrega 2: [link para docs editável](https://docs.google.com/document/d/1JkzBTUMDGWANjnApvreV2cIXuI78wKhP9aqwoCkCXgE/edit?usp=sharing)
+- Apresentação 2: [link do canva](https://canva.link/66pmw5cv2ctzzk2)
 - Relatório de uso de IA: [link para docs editável](https://docs.google.com/document/d/1WXMW7Fts2_f49Q9ebnQUhsL-pQ3Q5dQVZ9lmQBiZpnY/edit?usp=sharing)
+- Documento de Avaliação da Professora: [link para docs editável](https://docs.google.com/document/d/1rQKfyPm8Bnx2m3CkmlLdqLnAfEaQD1dmKo86sGk6tLM/edit?tab=t.0)
+
+
 
 ---
 
